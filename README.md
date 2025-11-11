@@ -1,0 +1,100 @@
+# Jira Attachment Cleaner
+
+Python CLI that inventories Jira issues for large/old attachments, lets you mark them for removal, and then deletes them while tracking progress (`TODO → IN_PROGRESS → DONE/ERROR`). If an attachment cannot be deleted because Jira reports it still has related comments, the tool removes any comments that reference the attachment and tries again.
+
+## Requirements
+
+- Python 3.10+
+- Jira Cloud (or Server/DC with the v3 REST API)
+- A Jira API token with permission to read/delete attachments and delete comments
+
+Install dependencies:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+## Configuration
+
+Copy `config.example.json` to `config.json` and fill in your Jira details:
+
+```json
+{
+  "base_url": "https://your-domain.atlassian.net",
+  "email": "you@example.com",
+  "api_token": "atlassian_api_token",
+  "project_keys": ["OPS", "PLAT"],
+  "verify_ssl": true,
+  "page_size": 50
+}
+```
+
+- `project_keys`: default project scope. Override with `--projects` when needed.
+- `page_size`: batch size when paging through Jira search results.
+- Store the file securely; it contains secrets.
+
+State is stored in `state/state.json` (configurable via `--state-file`). The CLI creates the folder automatically.
+
+## Commands
+
+Each command accepts `--config` to point at a specific config file.
+
+### 1. List candidate attachments
+
+```bash
+jira-utils list --before 2023-01-01 --min-size-mb 5
+```
+
+Outputs a table with project, issue key, attachment name/id, size, creation date, and whether it is already tracked in the state file. Filtering options:
+
+- `--projects OPS PLAT`
+- `--min-size-mb 10`
+- `--before 2022-12-31` (required)
+- `--max-issues 100` (useful while testing)
+
+### 2. Mark attachments for deletion
+
+Re-run the same filters, optionally narrowing to explicit attachment IDs you copied from the `list` output:
+
+```bash
+# Mark every attachment that matches the filters
+jira-utils mark --before 2023-01-01 --min-size-mb 5
+
+# Mark individual attachments
+jira-utils mark --before 2023-01-01 --min-size-mb 5 \
+  --attachment-id 12345 --attachment-id 67890
+```
+
+Marked attachments are saved with status `TODO` inside the state file.
+
+### 3. Process (delete) queued attachments
+
+```bash
+jira-utils process               # only TODO items
+jira-utils process --retry-errors  # include previous failures
+jira-utils process --limit 5
+```
+
+For each attachment, the CLI:
+
+1. Updates status to `IN_PROGRESS`.
+2. Calls the Jira delete attachment API.
+3. On specific failure codes, scans issue comments for references to the attachment (`id`, filename, or wiki-style `[^name]` markers), deletes those comments, and retries deletion.
+4. Marks the attachment `DONE` or `ERROR` (with the error text).
+
+### 4. Show current state
+
+```bash
+jira-utils status
+```
+
+Displays every tracked attachment with status and last error (if any).
+
+## Notes & Tips
+
+- Use narrow filters when testing to avoid hitting Jira rate limits.
+- Comment cleanup is aggressive: any issue comment containing the attachment name/ID is removed. Review filters before running `process` in production scenarios.
+- The CLI purposefully deletes attachments sequentially so progress is easy to follow and rollback is simple.
+- If you need different retention policies per project, run `list/mark/process` per project with project-specific arguments.
