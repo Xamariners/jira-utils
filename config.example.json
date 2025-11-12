@@ -1,0 +1,8 @@
+{
+  "base_url": "https://your-domain.atlassian.net",
+  "email": "user@example.com",
+  "api_token": "atlassian_api_token",
+  "project_keys": ["OPS"],
+  "verify_ssl": true,
+  "page_size": 50
+}

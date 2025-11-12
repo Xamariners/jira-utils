@@ -1,3 +1,13 @@
+Metadata-Version: 2.4
+Name: jira-utils-cli
+Version: 0.1.0
+Summary: Utilities for inventorying and cleaning Jira attachments.
+Author: ben
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.31
+Dynamic: requires-python
+
 # Jira Attachment Cleaner
 
 Python CLI that inventories Jira issues for large/old attachments, lets you mark them for removal, and then deletes them while tracking progress (`TODO → IN_PROGRESS → DONE/ERROR`). If an attachment cannot be deleted because Jira reports it still has related comments, the tool removes any comments that reference the attachment and tries again.
@@ -31,7 +41,7 @@ Copy `config.example.json` to `config.json` and fill in your Jira details:
 }
 ```
 
-- `project_keys`: default project scope. Override with `--projects` when needed. You can leave the list empty if you primarily use the interactive picker— it will fetch available projects directly from Jira.
+- `project_keys`: default project scope. Override with `--projects` when needed.
 - `page_size`: batch size when paging through Jira search results.
 - Store the file securely; it contains secrets.
 
@@ -50,7 +60,6 @@ jira-utils list --before 2023-01-01 --min-size-mb 5
 Outputs a table with project, issue key, attachment name/id, size, creation date, and whether it is already tracked in the state file. Filtering options:
 
 - `--projects OPS PLAT`
-- `--issue-types Story Task`
 - `--min-size-mb 10`
 - `--before 2022-12-31` (required)
 - `--max-issues 100` (useful while testing)
@@ -93,33 +102,6 @@ jira-utils status
 ```
 
 Displays every tracked attachment with status and last error (if any).
-
-### 5. Interactive picker
-
-Launch an ncurses UI to review attachments, select the ones you want to delete, and watch their status change (`TODO → IN_PROGRESS → DONE/ERROR`) as the tool processes them sequentially:
-
-```bash
-jira-utils interactive --before 2023-01-01 --min-size-mb 5
-```
-
-Filter overview:
-
-- Interactive mode now opens on a unified filter screen. Press `Enter` to load attachments, `p` to adjust projects, `t` to pick issue types (Story, Task, Bug, etc.), `m` to edit the minimum attachment size, and `b` to change the date cutoff (`before`).
-- Leaving either the project or issue-type selection empty includes everything you can access, which is handy when you want to review all projects or all issue types at once.
-
-Project / issue-type pickers:
-
-- Use `Space` to toggle an item, `a` to select/deselect all, `c` to clear, `m` to tweak the minimum size, `b` to edit the date, and `Enter` to return to the filter overview.
-
-Attachment list controls:
-
-- Arrow keys (or `j` / `k`) move the cursor; hold `Shift` with the arrows for range selects.
-- `Space` toggles the current row. `a` selects/clears all. `c` clears the current selection.
-- Press `m` to adjust the minimum size threshold or `b` to change the cutoff date; if deletions are running the reload happens once processing ends.
-- Press `d` (or `Enter`) to delete the selected attachments. Processing happens in the background, so you can keep scrolling while items are deleted and watch statuses update in real time. Attachments already marked as `DONE` are skipped automatically.
-- Use `p` to jump straight to the project picker, `t` for the issue-type picker, or `f` to revisit the filter overview without exiting the app. `q` (or `Esc`) still exits (double-press while deletions are running).
-
-The interactive mode requires `curses`, which ships with macOS/Linux Python builds. On Windows, use WSL or another environment that provides `curses`.
 
 ## Notes & Tips
 

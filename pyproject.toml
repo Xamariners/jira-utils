@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "pip>=21"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jira-utils-cli"
+version = "0.1.0"
+description = "Utilities for inventorying and cleaning Jira attachments."
+authors = [{name = "ben"}]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.31"
+]
+
+[project.scripts]
+jira-utils = "jira_utils.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
