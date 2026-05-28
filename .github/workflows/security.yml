@@ -4,14 +4,25 @@ on:
   pull_request:
   push:
     branches: [main, master]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "CHANGELOG*"
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !contains(fromJSON('["refs/heads/main","refs/heads/master"]'), github.ref) }}
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   gitleaks:
     name: gitleaks (secrets scan)
-    runs-on: ${{ vars.USE_SELF_HOSTED == 'false' && 'ubuntu-latest' || fromJSON('["self-hosted","sw-ci"]') }}
+    # Defaults to ubuntu-latest. Flip vars.USE_SELF_HOSTED=true per-repo
+    # to route through [self-hosted, sw-ci] instead.
+    runs-on: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","sw-ci"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,11 +52,51 @@ jobs:
             echo "scan=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Install gitleaks CLI directly — MIT-licensed, free for orgs.
+      # The gitleaks/gitleaks-action@v2 wrapper requires a paid org
+      # licence ("[Xamariners] is an organization. License key is required.").
+      # The CLI itself is unrestricted. See halo-iac/halo-ext-otel for the
+      # same pattern.
+      - name: Install gitleaks CLI
+        if: steps.scope.outputs.scan == 'true'
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
       - name: Run gitleaks
         if: steps.scope.outputs.scan == 'true'
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Use repo's .gitleaks.toml if present; otherwise default rules
+          if [ -f .gitleaks.toml ]; then
+            CFG_ARGS=(--config .gitleaks.toml)
+          else
+            CFG_ARGS=()
+          fi
+          gitleaks detect \
+            --source . \
+            "${CFG_ARGS[@]}" \
+            --redact \
+            --verbose \
+            --report-format json \
+            --report-path /tmp/gitleaks-report.json \
+            --exit-code 1
+
+      - name: Upload gitleaks report
+        if: steps.scope.outputs.scan == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report-${{ github.sha }}
+          path: /tmp/gitleaks-report.json
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Skipped (docs-only)
         if: steps.scope.outputs.scan != 'true'
